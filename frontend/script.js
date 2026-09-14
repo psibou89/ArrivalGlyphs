@@ -1,5 +1,9 @@
-// ArrivalGlyphs — génère un logogramme circulaire à partir d'un texte.
-// Le même texte donne toujours le même glyphe (hash déterministe -> PRNG -> forme).
+// ArrivalGlyphs — génère un logogramme à partir d'un texte, dans l'esprit
+// visuel des vrais logogrammes du film (voir ScriptLogoJpegs/ du dépôt
+// WolframResearch/Arrival-Movie-Live-Coding) : un anneau d'encre noire à
+// largeur variable (parfois ouvert, extrémités effilées), avec un ou
+// plusieurs amas denses d'où partent de fins filaments — pas de "nœuds"
+// ni de halo lumineux, c'est de l'encre plate, noir sur blanc.
 
 const canvas = document.getElementById("glyphCanvas");
 const ctx = canvas.getContext("2d");
@@ -7,6 +11,8 @@ const form = document.getElementById("glyphForm");
 const textInput = document.getElementById("textInput");
 const caption = document.getElementById("caption");
 const btnDownload = document.getElementById("btnDownload");
+
+const INK = "#111111";
 
 // ---------------------------------------------------------------------------
 // Hash déterministe (FNV-1a) + PRNG (mulberry32) : même texte -> même graine
@@ -31,145 +37,204 @@ function mulberry32(seed) {
   };
 }
 
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+// Bruit lisse et périodique (somme d'harmoniques sinusoïdales) : donne une
+// ondulation organique et continue sur un tour complet, sans bibliothèque.
+function harmonicNoise(rng, count) {
+  const terms = [];
+  for (let i = 0; i < count; i++) {
+    terms.push({ freq: i + 1, amp: 1 / (i + 1), phase: rng() * Math.PI * 2 });
+  }
+  return (theta) => {
+    let v = 0;
+    for (const t of terms) v += t.amp * Math.sin(t.freq * theta + t.phase);
+    return v / terms.length;
+  };
+}
+
+function angularDist(a, b) {
+  let d = Math.abs(a - b) % (Math.PI * 2);
+  return d > Math.PI ? Math.PI * 2 - d : d;
+}
+
 // ---------------------------------------------------------------------------
-// Construction du glyphe : un anneau irrégulier (les points de contrôle
-// varient en angle/rayon/épaisseur) + quelques appendices (petits traits qui
-// partent de l'anneau, façon marques radiales des logogrammes du film).
+// Construction du glyphe : un anneau (rayon/épaisseur qui varient en douceur
+// le long du tour, parfois ouvert) + un ou plusieurs amas denses (blob +
+// filaments fins) fusionnés à l'anneau à des angles précis.
 // ---------------------------------------------------------------------------
 function buildGlyph(text) {
   const seed = hashString(text.trim().toLowerCase() || "heptapod");
   const rng = mulberry32(seed);
 
-  const pointCount = 10 + Math.floor(rng() * 5); // 10 à 14 points
-  const baseRadius = 0.3;
-  const ring = [];
-  for (let i = 0; i < pointCount; i++) {
-    const angle = (i / pointCount) * Math.PI * 2 + (rng() - 0.5) * 0.25;
-    const radius = baseRadius * (0.7 + rng() * 0.55);
-    const thickness = 0.012 + rng() * 0.02; // proportion du canvas
-    ring.push({ angle, radius, thickness });
+  const baseRadius = 0.34;
+  const baseWidth = 0.014;
+  const radiusNoise = harmonicNoise(rng, 3);
+  const widthNoise = harmonicNoise(rng, 2);
+  // Bruit fin (haute fréquence, faible amplitude) pour une texture "main
+  // levée" sur le bord — reste lisse (base sinusoïdale) contrairement à un
+  // bruit aléatoire indépendant par échantillon, qui donnerait un bord en
+  // dents de scie au lieu d'un tracé irrégulier mais continu.
+  const fineNoise = harmonicNoise(rng, 14);
+
+  const clusterCount = pick(rng, [1, 1, 1, 2, 2, 3]);
+  const clusters = [];
+  for (let c = 0; c < clusterCount; c++) {
+    let angle;
+    let tries = 0;
+    do {
+      angle = rng() * Math.PI * 2;
+      tries++;
+    } while (clusters.some((o) => angularDist(o.angle, angle) < 1.1) && tries < 20);
+    clusters.push({ angle, bumpWidth: 0.35 + rng() * 0.25, bumpAmount: baseWidth * (2.2 + rng() * 1.8) });
   }
 
-  // Quelques points de l'anneau reçoivent un appendice (trait + petite bulle
-  // d'encre à l'extrémité, vers l'extérieur ou l'intérieur du cercle).
-  const appendages = [];
-  const appendageCount = 2 + Math.floor(rng() * 4); // 2 à 5
-  for (let k = 0; k < appendageCount; k++) {
-    const from = ring[Math.floor(rng() * ring.length)];
-    const outward = rng() > 0.35;
-    const length = (outward ? 1 : -1) * (0.08 + rng() * 0.16);
-    const curve = (rng() - 0.5) * 0.6;
-    const endThickness = 0.01 + rng() * 0.018;
-    appendages.push({ angle: from.angle, startRadius: from.radius, length, curve, endThickness });
+  const hasGap = rng() < 0.4;
+  let gapAngle = null, gapHalfWidth = 0;
+  if (hasGap) {
+    let tries = 0;
+    do {
+      gapAngle = rng() * Math.PI * 2;
+      tries++;
+    } while (clusters.some((o) => angularDist(o.angle, gapAngle) < 0.6) && tries < 20);
+    gapHalfWidth = 0.1 + rng() * 0.12;
   }
 
-  return { seed, ring, appendages };
+  // Échantillonnage fin de l'anneau (rayon + épaisseur) sur tout le tour
+  // utile (hors coupure), avec un fondu à l'épaisseur mini aux deux bouts
+  // quand l'anneau est ouvert, pour un effet "pointe de pinceau".
+  const steps = 220;
+  const samples = [];
+  for (let i = 0; i <= steps; i++) {
+    const theta = (i / steps) * Math.PI * 2;
+    if (hasGap && angularDist(theta, gapAngle) < gapHalfWidth) continue;
+
+    let width = baseWidth * (1 + widthNoise(theta) * 0.5);
+    for (const c of clusters) {
+      const d = angularDist(theta, c.angle);
+      width += c.bumpAmount * Math.exp(-(d * d) / (2 * c.bumpWidth * c.bumpWidth));
+    }
+    if (hasGap) {
+      const d = angularDist(theta, gapAngle);
+      const taper = Math.min(1, Math.max(0, (d - gapHalfWidth) / 0.35));
+      width *= 0.06 + 0.94 * taper;
+    }
+    const radius = baseRadius * (1 + radiusNoise(theta) * 0.08 + fineNoise(theta) * 0.012);
+    width *= 1 + fineNoise(theta * 1.7 + 1.3) * 0.15;
+    samples.push({ theta, radius, width: Math.max(width, baseWidth * 0.12) });
+  }
+
+  // Filaments de chaque amas : fins traits qui partent du blob, longueurs et
+  // angles variés, quelques-uns terminés par une minuscule goutte.
+  clusters.forEach((c) => {
+    c.whiskers = [];
+    const n = 10 + Math.floor(rng() * 12);
+    for (let i = 0; i < n; i++) {
+      const spread = (rng() - 0.5) * 2.6; // direction autour du rayon local
+      const dir = c.angle + spread;
+      const length = (rng() < 0.75 ? 0.02 + rng() * 0.05 : 0.09 + rng() * 0.14);
+      const curve = (rng() - 0.5) * 0.7;
+      const withDrop = rng() < 0.3;
+      c.whiskers.push({ dir, length, curve, withDrop, w: 0.0025 + rng() * 0.003 });
+    }
+    // Silhouette du blob (polygone irrégulier fermé, centré sur l'anneau).
+    c.blob = [];
+    const bn = 9 + Math.floor(rng() * 5);
+    for (let i = 0; i < bn; i++) {
+      const a = (i / bn) * Math.PI * 2;
+      const r = c.bumpAmount * (1.3 + rng() * 0.9);
+      c.blob.push({ a, r });
+    }
+  });
+
+  return { seed, baseRadius, samples, clusters };
 }
 
 // ---------------------------------------------------------------------------
-// Rendu : trait "encre" reconstitué par plusieurs passes (halo flou + trait
-// net + bulbes aux points d'ancrage) plutôt qu'un vrai trait à largeur
-// variable — plus simple et donne un rendu organique convaincant en Canvas.
+// Rendu Canvas — encre plate (pas de halo/flou) : l'anneau est rempli comme
+// un vrai ruban à largeur variable (bord extérieur puis bord intérieur en
+// sens inverse), les amas et filaments par-dessus.
 // ---------------------------------------------------------------------------
-function polarToXY(cx, cy, size, angle, radius) {
+function polar(cx, cy, size, angle, radius) {
   return { x: cx + Math.cos(angle) * radius * size, y: cy + Math.sin(angle) * radius * size };
-}
-
-function strokeInkPath(points, closed, baseWidth, size) {
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "#e8edf3";
-
-  // Halo flou (dépôt d'encre diffus autour du trait).
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.filter = "blur(6px)";
-  ctx.lineWidth = baseWidth * size * 1.8;
-  tracePath(points, closed);
-  ctx.stroke();
-  ctx.restore();
-
-  // Trait net (le cœur du trait d'encre).
-  ctx.save();
-  ctx.globalAlpha = 0.92;
-  ctx.filter = "none";
-  ctx.lineWidth = baseWidth * size;
-  tracePath(points, closed);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function tracePath(points, closed) {
-  ctx.beginPath();
-  if (closed) {
-    // Courbe lissée passant par les milieux de segments (technique classique
-    // pour une boucle fermée organique à partir de points de contrôle épars).
-    const first = points[0];
-    const last = points[points.length - 1];
-    let mid = { x: (last.x + first.x) / 2, y: (last.y + first.y) / 2 };
-    ctx.moveTo(mid.x, mid.y);
-    for (let i = 0; i < points.length; i++) {
-      const cur = points[i];
-      const next = points[(i + 1) % points.length];
-      const nextMid = { x: (cur.x + next.x) / 2, y: (cur.y + next.y) / 2 };
-      ctx.quadraticCurveTo(cur.x, cur.y, nextMid.x, nextMid.y);
-    }
-    ctx.closePath();
-  } else {
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      const mid = { x: (points[i - 1].x + points[i].x) / 2, y: (points[i - 1].y + points[i].y) / 2 };
-      ctx.quadraticCurveTo(points[i - 1].x, points[i - 1].y, mid.x, mid.y);
-    }
-    ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-  }
-}
-
-function inkBlob(x, y, radius) {
-  ctx.save();
-  ctx.globalAlpha = 0.3;
-  ctx.filter = "blur(5px)";
-  ctx.fillStyle = "#e8edf3";
-  ctx.beginPath();
-  ctx.arc(x, y, radius * 1.7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = 0.9;
-  ctx.filter = "none";
-  ctx.fillStyle = "#e8edf3";
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 }
 
 function renderGlyph(glyph) {
   const size = canvas.width;
-  const cx = size / 2;
-  const cy = size / 2;
-
+  const cx = size / 2, cy = size / 2;
   ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = INK;
 
-  // Anneau principal.
-  const ringPoints = glyph.ring.map((p) => polarToXY(cx, cy, size, p.angle, p.radius));
-  const avgThickness = glyph.ring.reduce((s, p) => s + p.thickness, 0) / glyph.ring.length;
-  strokeInkPath(ringPoints, true, avgThickness, size);
-  glyph.ring.forEach((p, i) => {
-    const pt = ringPoints[i];
-    inkBlob(pt.x, pt.y, p.thickness * size * 0.55);
+  // --- Anneau : un unique polygone rempli (ruban à largeur variable) ---
+  // Regroupe les segments continus (une coupure peut fragmenter l'anneau en
+  // plusieurs arcs quand hasGap est actif).
+  const segments = [];
+  let current = [];
+  for (let i = 0; i < glyph.samples.length; i++) {
+    const s = glyph.samples[i];
+    const prev = glyph.samples[i - 1];
+    if (prev && s.theta - prev.theta > (Math.PI * 2 / 220) * 1.5) {
+      if (current.length > 1) segments.push(current);
+      current = [];
+    }
+    current.push(s);
+  }
+  if (current.length > 1) segments.push(current);
+  // Anneau non coupé : le premier et le dernier échantillon coïncident déjà
+  // (theta = 0 et theta = 2π donnent le même point), la boucle se referme
+  // naturellement sans traitement particulier.
+
+  segments.forEach((seg) => {
+    ctx.beginPath();
+    seg.forEach((s, i) => {
+      const p = polar(cx, cy, size, s.theta, s.radius + s.width / 2);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    for (let i = seg.length - 1; i >= 0; i--) {
+      const s = seg[i];
+      const p = polar(cx, cy, size, s.theta, s.radius - s.width / 2);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fill();
   });
 
-  // Appendices : un petit trait courbe partant de l'anneau, bulbe à l'extrémité.
-  glyph.appendages.forEach((a) => {
-    const start = polarToXY(cx, cy, size, a.angle, a.startRadius);
-    const endRadius = a.startRadius + a.length;
-    const midRadius = a.startRadius + a.length * 0.5;
-    const mid = polarToXY(cx, cy, size, a.angle + a.curve * 0.5, midRadius);
-    const end = polarToXY(cx, cy, size, a.angle + a.curve, endRadius);
-    strokeInkPath([start, mid, end], false, a.endThickness * 0.8, size);
-    inkBlob(end.x, end.y, a.endThickness * size * 0.6);
+  // --- Amas : blob irrégulier + filaments fins, ancrés sur l'anneau ---
+  glyph.clusters.forEach((c) => {
+    const ringSample = glyph.samples.reduce((best, s) =>
+      angularDist(s.theta, c.angle) < angularDist(best.theta, c.angle) ? s : best, glyph.samples[0]);
+    const center = polar(cx, cy, size, c.angle, ringSample.radius);
+
+    ctx.beginPath();
+    c.blob.forEach((b, i) => {
+      const x = center.x + Math.cos(b.a) * b.r * size;
+      const y = center.y + Math.sin(b.a) * b.r * size;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fill();
+
+    c.whiskers.forEach((w) => {
+      const end = { x: center.x + Math.cos(w.dir) * w.length * size, y: center.y + Math.sin(w.dir) * w.length * size };
+      const perp = w.dir + Math.PI / 2;
+      const midLen = w.length * 0.55;
+      const mid = {
+        x: center.x + Math.cos(w.dir) * midLen * size + Math.cos(perp) * w.curve * w.length * size,
+        y: center.y + Math.sin(w.dir) * midLen * size + Math.sin(perp) * w.curve * w.length * size,
+      };
+      ctx.lineCap = "round";
+      ctx.lineWidth = w.w * size;
+      ctx.strokeStyle = INK;
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.quadraticCurveTo(mid.x, mid.y, end.x, end.y);
+      ctx.stroke();
+      if (w.withDrop) {
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, w.w * size * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
   });
 }
 

@@ -60,9 +60,9 @@ main {
 #glyphCanvas {
   width: min(90vw, 480px);
   height: min(90vw, 480px);
-  background: radial-gradient(circle at 50% 45%, #161c26 0%, #0d1117 75%);
+  background: #f9f7f2;
   border-radius: 50%;
-  box-shadow: 0 0 60px rgba(111, 183, 201, 0.08), inset 0 0 40px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.03);
 }
 
 .caption {
