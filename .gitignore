@@ -1,0 +1,5 @@
+# Fichiers système
+.DS_Store
+
+# Éditeurs
+.vscode/
