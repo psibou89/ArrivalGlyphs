@@ -24,4 +24,4 @@ Référence : dépôt companion officiel du film (analyse des logogrammes, carto
 
 ## Statut
 
-🟡 En cours — environnement de projet initialisé. Prochaine étape : cadrer précisément le principe de génération (ex. à partir d'un texte saisi, façon "traducteur" vers un logogramme, ou génération purement esthétique/aléatoire).
+🟢 Terminé — générateur fonctionnel (`frontend/index.html`), texte → logogramme déterministe, rendu fidèle aux vraies images de référence du film. Pour l'ouvrir : `cd frontend && python3 -m http.server 8790` puis `http://localhost:8790`.
