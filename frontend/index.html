@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ArrivalGlyphs</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>ArrivalGlyphs</h1>
+    <p class="subtitle">Un texte, un logogramme heptapode — chaque mot a toujours le même glyphe.</p>
+  </header>
+
+  <main>
+    <div class="stage">
+      <canvas id="glyphCanvas" width="640" height="640"></canvas>
+      <p id="caption" class="caption"></p>
+    </div>
+
+    <form id="glyphForm" class="controls">
+      <label for="textInput">Texte à traduire</label>
+      <input type="text" id="textInput" maxlength="60" placeholder="human, weapon, time…" autocomplete="off">
+      <div class="btn-row">
+        <button type="submit" class="btn primary">Générer</button>
+        <button type="button" id="btnDownload" class="btn">Télécharger PNG</button>
+      </div>
+      <p class="hint">Le glyphe est calculé à partir du texte (même texte = même glyphe, à chaque fois).</p>
+    </form>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

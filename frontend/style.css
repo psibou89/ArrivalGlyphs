@@ -1,0 +1,134 @@
+/* Palette : verre sombre + brume, comme l'écran de communication du film. */
+:root {
+  --bg-1: #0b0e13;
+  --bg-2: #1a2029;
+  --ink: #e8edf3;
+  --text: #c7cfda;
+  --text-soft: #7c8494;
+  --accent: #6fb7c9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 2.5rem 1.25rem 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: radial-gradient(ellipse at 50% -10%, var(--bg-2), var(--bg-1) 70%);
+}
+
+header { text-align: center; max-width: 32rem; }
+
+h1 {
+  margin: 0 0 0.4rem;
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 1.6rem;
+  color: var(--ink);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+  width: 100%;
+  max-width: 42rem;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+}
+
+#glyphCanvas {
+  width: min(90vw, 480px);
+  height: min(90vw, 480px);
+  background: radial-gradient(circle at 50% 45%, #161c26 0%, #0d1117 75%);
+  border-radius: 50%;
+  box-shadow: 0 0 60px rgba(111, 183, 201, 0.08), inset 0 0 40px rgba(0,0,0,0.5);
+}
+
+.caption {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+label {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #2a3140;
+  background: #131822;
+  color: var(--ink);
+  font: inherit;
+}
+
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  flex: 1 1 auto;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #2a3140;
+  background: #171d28;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--accent); }
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0e13;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
